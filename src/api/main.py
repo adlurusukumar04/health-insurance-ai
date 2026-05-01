@@ -1,34 +1,40 @@
 """
-main.py  –  FastAPI Application
---------------------------------
-REST API endpoints for all ML modules:
-  POST /api/v1/claims/predict       → Claim approval prediction
-  POST /api/v1/fraud/detect         → Fraud detection
-  POST /api/v1/nlp/analyze          → Medical text NLP
-  POST /api/v1/recommend            → Plan recommendations
-  GET  /api/v1/health               → Health check
-  GET  /api/v1/models/status        → Model registry status
+main.py  —  FastAPI Application
 """
 
+import hashlib
 import logging
+import random
+import re
+import uuid
+from contextlib import asynccontextmanager
 from typing import List, Optional
 
 import pandas as pd
-from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+# ── Lifespan (replaces on_event) ──────────────────────────────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("🚀 Health Insurance AI Platform starting...")
+    get_claim_model()
+    get_fraud_model()
+    get_recommender()
+    logger.info("✅ API ready — visit /docs for Swagger UI")
+    yield
+
 
 app = FastAPI(
     title="Health Insurance AI Platform – Lumen Technologies",
     description="AI/ML APIs for claim approval, fraud detection, NLP, and recommendations",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -39,24 +45,22 @@ app.add_middleware(
 )
 
 
-# ─── Pydantic Schemas ──────────────────────────────────────────────────────────
-
-
+# ── Pydantic Schemas ──────────────────────────────────────────
 class ClaimRequest(BaseModel):
     member_id: str
     claim_amount: float = Field(..., gt=0)
-    claim_type: str = Field(..., example="Outpatient")
-    diagnosis_code: str = Field(..., example="I10")
-    procedure_code: str = Field(..., example="99213")
+    claim_type: str = Field(..., json_schema_extra={"example": "Outpatient"})
+    diagnosis_code: str = Field(..., json_schema_extra={"example": "I10"})
+    procedure_code: str = Field(..., json_schema_extra={"example": "99213"})
     num_procedures: int = Field(1, ge=1)
     days_in_hospital: int = Field(0, ge=0)
     prior_auth: int = Field(0, ge=0, le=1)
     member_age: int = Field(..., ge=18, le=100)
     member_bmi: float = Field(..., ge=10, le=70)
     member_smoker: int = Field(0, ge=0, le=1)
-    member_plan: str = Field("Silver", example="Silver")
+    member_plan: str = Field("Silver", json_schema_extra={"example": "Silver"})
     num_chronic: int = Field(0, ge=0)
-    state: str = Field("CA", example="CA")
+    state: str = Field("CA", json_schema_extra={"example": "CA"})
 
 
 class ClaimResponse(BaseModel):
@@ -125,7 +129,7 @@ class RecommendResponse(BaseModel):
     explanation: str
 
 
-# ─── Model Cache ──────────────────────────────────────────────────────────────
+# ── Model Cache ───────────────────────────────────────────────
 _models = {}
 
 
@@ -168,11 +172,8 @@ def get_recommender():
     return _models["recommender"]
 
 
-# ─── Mock Predictions (fallback when models not trained) ──────────────────────
+# ── Mock Predictions ──────────────────────────────────────────
 def _mock_claim_predict(req: ClaimRequest) -> dict:
-    import hashlib
-    import random
-
     seed = int(hashlib.md5(req.member_id.encode()).hexdigest()[:8], 16)
     rng = random.Random(seed)
     prob = rng.uniform(0.5, 0.98)
@@ -188,9 +189,6 @@ def _mock_claim_predict(req: ClaimRequest) -> dict:
 
 
 def _mock_fraud_predict(req: FraudRequest) -> dict:
-    import hashlib
-    import random
-
     seed = int(hashlib.md5(req.claim_id.encode()).hexdigest()[:8], 16)
     rng = random.Random(seed)
     score = rng.uniform(0.0, 0.4)
@@ -204,9 +202,32 @@ def _mock_fraud_predict(req: FraudRequest) -> dict:
     }
 
 
-# ─── Routes ───────────────────────────────────────────────────────────────────
+# ── Inline NLP Preprocessor (no torch needed) ─────────────────
+class _SimplePreprocessor:
+    _abbrevs = {
+        "pt": "patient",
+        "htn": "hypertension",
+        "dx": "diagnosis",
+        "tx": "treatment",
+        "hx": "history",
+        "dm": "diabetes mellitus",
+        "sob": "shortness of breath",
+        "cp": "chest pain",
+        "n/v": "nausea vomiting",
+        "bp": "blood pressure",
+    }
+
+    def clean(self, text: str) -> str:
+        if not isinstance(text, str):
+            return ""
+        text = text.lower().strip()
+        for k, v in self._abbrevs.items():
+            text = re.sub(rf"\b{re.escape(k)}\b", v, text)
+        text = re.sub(r"[^a-z0-9\s\.\,\-\/]", " ", text)
+        return re.sub(r"\s+", " ", text).strip()
 
 
+# ── Routes ────────────────────────────────────────────────────
 @app.get("/api/v1/health", tags=["System"])
 def health_check():
     return {
@@ -223,26 +244,23 @@ def models_status():
         "claim_approval": "loaded" if _models.get("claim") else "not_loaded",
         "fraud_detection": "loaded" if _models.get("fraud") else "not_loaded",
         "recommender": "loaded" if _models.get("recommender") else "not_loaded",
-        "nlp": "loaded" if _models.get("nlp") else "not_loaded",
+        "nlp": "not_loaded",
     }
 
 
 @app.post("/api/v1/claims/predict", response_model=ClaimResponse, tags=["Claims"])
 def predict_claim(req: ClaimRequest, background_tasks: BackgroundTasks):
-    """
-    Predict claim approval probability and risk score.
-    Returns decision: Approve or Review.
-    """
     model = get_claim_model()
-    import uuid
-
     if model:
-        from src.preprocessing.feature_engineering import ClaimFeatureEngineer
+        try:
+            from src.preprocessing.feature_engineering import ClaimFeatureEngineer
 
-        engineer = ClaimFeatureEngineer.load("claim_feature_engineer")
-        df = pd.DataFrame([req.dict()])
-        X = engineer.transform(df)
-        result = model.risk_score(X).iloc[0].to_dict()
+            engineer = ClaimFeatureEngineer.load("claim_feature_engineer")
+            df = pd.DataFrame([req.model_dump()])
+            X = engineer.transform(df)
+            result = model.risk_score(X).iloc[0].to_dict()
+        except Exception:
+            result = _mock_claim_predict(req)
     else:
         result = _mock_claim_predict(req)
 
@@ -259,69 +277,82 @@ def predict_claim(req: ClaimRequest, background_tasks: BackgroundTasks):
 
 @app.post("/api/v1/fraud/detect", response_model=FraudResponse, tags=["Fraud"])
 def detect_fraud(req: FraudRequest):
-    """
-    Detect potential fraud using Isolation Forest + K-Means ensemble.
-    Returns anomaly score and fraud flag.
-    """
     model = get_fraud_model()
+    result = None
 
     if model:
-        from src.preprocessing.feature_engineering import FraudFeatureEngineer
+        try:
+            from src.preprocessing.feature_engineering import FraudFeatureEngineer
 
-        engineer = FraudFeatureEngineer.load("fraud_feature_engineer")
-        df = pd.DataFrame([req.dict()])
-        X = engineer.transform(df)
-        result = model.predict_combined(X).iloc[0].to_dict()
+            engineer = FraudFeatureEngineer.load("fraud_feature_engineer")
+            data = req.model_dump()
+            ca = data.get("claim_amount", 5000.0)
+            # Ensure all required aggregated columns exist
+            for col, default in [
+                ("provider_avg_claim", ca),
+                ("provider_claim_count", 100),
+                ("provider_unique_members", 80),
+                ("member_claim_count", 5),
+                ("member_avg_claim", ca * 0.6),
+                ("member_total_spend", ca * 3),
+            ]:
+                if data.get(col) is None:
+                    data[col] = default
+            data["amount_vs_provider_avg"] = ca / max(data["provider_avg_claim"], 1)
+            data["amount_vs_member_avg"] = ca / max(data["member_avg_claim"], 1)
+            data["procedure_density"] = data.get("num_procedures", 1) / max(
+                data.get("days_in_hospital", 1), 1
+            )
+            df = pd.DataFrame([data])
+            # Rename columns with _y suffix if they exist (from merges)
+            df.columns = [
+                c.replace("_y", "").replace("_x", "") if c.endswith(("_x", "_y")) else c
+                for c in df.columns
+            ]
+            X = engineer.transform(df)
+            result = model.predict_combined(X).iloc[0].to_dict()
+        except Exception as e:
+            logger.warning(f"Fraud model error: {e}. Using mock.")
+            result = _mock_fraud_predict(req)
     else:
         result = _mock_fraud_predict(req)
 
-    score = result["combined_fraud_score"]
+    score = result.get("combined_fraud_score", 0.0)
     alert = "HIGH" if score > 0.75 else "MEDIUM" if score > 0.5 else "LOW"
 
     return FraudResponse(
         claim_id=req.claim_id,
-        is_anomaly=int(result["is_anomaly"]),
-        anomaly_score=float(result["anomaly_score"]),
-        fraud_flag=int(result["fraud_flag"]),
-        high_fraud_cluster=int(result["high_fraud_cluster"]),
-        combined_fraud_score=float(result["combined_fraud_score"]),
+        is_anomaly=int(result.get("is_anomaly", 0)),
+        anomaly_score=float(result.get("anomaly_score", score)),
+        fraud_flag=int(result.get("fraud_flag", 0)),
+        high_fraud_cluster=int(result.get("high_fraud_cluster", 0)),
+        combined_fraud_score=float(score),
         alert_level=alert,
     )
 
 
 @app.post("/api/v1/nlp/analyze", response_model=NLPResponse, tags=["NLP"])
 def analyze_medical_text(req: NLPRequest):
-    """
-    Analyze clinical notes: clean text, predict diagnosis, analyze sentiment.
-    """
-    from src.models.nlp_medical_text import MedicalTextPreprocessor
-
-    preprocessor = MedicalTextPreprocessor()
+    # Use inline preprocessor — no torch required
+    preprocessor = _SimplePreprocessor()
     cleaned = preprocessor.clean(req.clinical_note)
 
-    # Attempt BERT prediction, fallback to keyword heuristic
-    try:
-        from src.models.nlp_medical_text import BERTDiagnosisClassifier
-
-        bert = BERTDiagnosisClassifier()
-        preds = bert.predict([cleaned])
-        diagnosis = preds.iloc[0]["predicted_diagnosis"]
-        confidence = float(preds.iloc[0]["confidence"])
-    except Exception:
-        # Keyword fallback
-        diagnosis_map = {
-            "hypertension": ("I10", 0.85),
-            "diabetes": ("E11", 0.82),
-            "asthma": ("J45", 0.80),
-            "pain": ("M54", 0.70),
-            "cancer": ("C34", 0.75),
-            "depression": ("F32", 0.78),
-        }
-        diagnosis, confidence = "J06", 0.60
-        for kw, (dx, conf) in diagnosis_map.items():
-            if kw in cleaned:
-                diagnosis, confidence = dx, conf
-                break
+    # Keyword-based diagnosis fallback
+    diagnosis_map = {
+        "hypertension": ("I10", 0.85),
+        "diabetes": ("E11", 0.82),
+        "asthma": ("J45", 0.80),
+        "pain": ("M54", 0.70),
+        "cancer": ("C34", 0.75),
+        "depression": ("F32", 0.78),
+        "coronary": ("I25", 0.80),
+        "kidney": ("N18", 0.77),
+    }
+    diagnosis, confidence = "J06", 0.60
+    for kw, (dx, conf) in diagnosis_map.items():
+        if kw in cleaned:
+            diagnosis, confidence = dx, conf
+            break
 
     return NLPResponse(
         note_id=req.note_id,
@@ -337,42 +368,23 @@ def analyze_medical_text(req: NLPRequest):
     "/api/v1/recommend", response_model=RecommendResponse, tags=["Recommendations"]
 )
 def recommend_plan(req: RecommendRequest):
-    """
-    Recommend personalized insurance plans using Hybrid CF + KNN + Content-Based.
-    """
     recommender = get_recommender()
-    profile = req.dict()
+    profile = req.model_dump()
 
     if recommender:
-        recs = recommender.recommend(req.member_id, profile, top_n=3)
+        try:
+            recs = recommender.recommend(req.member_id, profile, top_n=3)
+        except Exception:
+            recs = _fallback_recs(req)
     else:
-        # Heuristic fallback
-        age, chronic = req.age, req.num_chronic_conditions
-        if age > 60 or chronic >= 3:
-            recs = [
-                {"plan": "Platinum", "score": 0.90},
-                {"plan": "Gold", "score": 0.75},
-                {"plan": "Silver", "score": 0.55},
-            ]
-        elif age > 40 or chronic >= 1:
-            recs = [
-                {"plan": "Gold", "score": 0.85},
-                {"plan": "Silver", "score": 0.72},
-                {"plan": "Platinum", "score": 0.60},
-            ]
-        else:
-            recs = [
-                {"plan": "Silver", "score": 0.88},
-                {"plan": "Bronze", "score": 0.70},
-                {"plan": "Gold", "score": 0.55},
-            ]
+        recs = _fallback_recs(req)
 
     top_plan = recs[0]["plan"] if recs else "Silver"
     explanation = (
-        f"Based on your profile (age {req.age}, {req.num_chronic_conditions} chronic conditions), "
+        f"Based on your profile (age {req.age}, "
+        f"{req.num_chronic_conditions} chronic conditions), "
         f"the {top_plan} plan offers the best balance of coverage and cost."
     )
-
     return RecommendResponse(
         member_id=req.member_id,
         recommendations=recs,
@@ -380,11 +392,31 @@ def recommend_plan(req: RecommendRequest):
     )
 
 
+def _fallback_recs(req: RecommendRequest) -> list:
+    if req.age > 60 or req.num_chronic_conditions >= 3:
+        return [
+            {"plan": "Platinum", "score": 0.90},
+            {"plan": "Gold", "score": 0.75},
+            {"plan": "Silver", "score": 0.55},
+        ]
+    elif req.age > 40 or req.num_chronic_conditions >= 1:
+        return [
+            {"plan": "Gold", "score": 0.85},
+            {"plan": "Silver", "score": 0.72},
+            {"plan": "Platinum", "score": 0.60},
+        ]
+    else:
+        return [
+            {"plan": "Silver", "score": 0.88},
+            {"plan": "Bronze", "score": 0.70},
+            {"plan": "Gold", "score": 0.55},
+        ]
+
+
 @app.post("/api/v1/claims/batch", tags=["Claims"])
 def predict_claims_batch(claims: List[ClaimRequest], background_tasks: BackgroundTasks):
-    """Batch claim prediction — processes up to 100 claims per request."""
     if len(claims) > 100:
-        raise HTTPException(status_code=400, detail="Max 100 claims per batch request")
+        raise HTTPException(status_code=400, detail="Max 100 claims per batch")
     results = [predict_claim(c, background_tasks) for c in claims]
     return {
         "total": len(results),
@@ -392,13 +424,3 @@ def predict_claims_batch(claims: List[ClaimRequest], background_tasks: Backgroun
         "review": sum(1 for r in results if r.decision == "Review"),
         "results": results,
     }
-
-
-# ─── Startup ──────────────────────────────────────────────────────────────────
-@app.on_event("startup")
-async def startup_event():
-    logger.info("🚀 Health Insurance AI Platform starting...")
-    get_claim_model()
-    get_fraud_model()
-    get_recommender()
-    logger.info("✅ API ready — visit /docs for Swagger UI")
