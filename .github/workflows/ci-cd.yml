@@ -8,12 +8,10 @@ on:
 
 env:
   PYTHON_VERSION: "3.11"
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/health-insurance-api
 
 jobs:
 
-  # ── 1. Code Quality ──────────────────────────────────────────────────────
+  # ── 1. Code Quality ──────────────────────────────────────────
   lint-and-format:
     name: Lint & Format Check
     runs-on: ubuntu-latest
@@ -34,10 +32,10 @@ jobs:
       - name: Flake8 lint
         run: flake8 src/ --max-line-length=120 --ignore=E501,W503,F401,F841,F821,F541,E401
 
-      - name: Import order check
+      - name: Sort imports
         run: isort src/
 
-  # ── 2. Unit Tests ─────────────────────────────────────────────────────────
+  # ── 2. Unit Tests ─────────────────────────────────────────────
   test:
     name: Run Tests
     runs-on: ubuntu-latest
@@ -54,36 +52,84 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip setuptools wheel
-          pip install numpy>=1.24.0
-          pip install scikit-learn xgboost lightgbm imbalanced-learn joblib
+          pip install "numpy>=1.24.0,<2.0.0"
+          pip install "scikit-learn>=1.3.0,<2.0.0"
+          pip install "pandas>=2.0.0,<3.0.0" scipy pyarrow
+          pip install xgboost lightgbm imbalanced-learn joblib
           pip install fastapi uvicorn httpx pydantic python-multipart requests
-          pip install pandas scipy pyarrow python-dotenv
-          pip install pytest pytest-asyncio pytest-cov
+          pip install python-dotenv loguru tqdm
           pip install psycopg2-binary pymongo sqlalchemy
-          pip install loguru tqdm
+          pip install pytest pytest-asyncio pytest-cov
 
       - name: Generate synthetic data
         run: |
           export PYTHONPATH=.
-          python src/ingestion/generate_synthetic_data.py --members 500 --claims 2000 --providers 50 --notes 500
+          python src/ingestion/generate_synthetic_data.py \
+            --members 500 --claims 2000 --providers 50 --notes 500
 
-      - name: Run unit tests
+      - name: Train models fresh for CI
         run: |
           export PYTHONPATH=.
-          pytest tests/ -v --ignore=tests/test_pipeline.py -x || true
+          python -c "
+          import sys
+          sys.path.insert(0, '.')
+          from src.ingestion.data_ingestion import LocalIngestion
+          from src.preprocessing.feature_engineering import PreprocessingPipeline
+          from src.models.claim_approval_model import ClaimApprovalModel
+          from src.models.fraud_detection_model import FraudDetectionModel
+          from src.models.recommendation_engine import HybridRecommender
+          import pandas as pd
+          from pathlib import Path
+
+          print('Loading data...')
+          data = LocalIngestion().load_all()
+
+          print('Feature engineering...')
+          pipeline = PreprocessingPipeline()
+          processed = pipeline.fit_transform_all(data)
+
+          print('Training claim model...')
+          model = ClaimApprovalModel(model_type='logistic')
+          model.train(processed['claim_features'], processed['claim_labels'])
+
+          print('Training fraud model...')
+          fraud = FraudDetectionModel()
+          fraud.train_isolation_forest(processed['fraud_features'])
+          fraud.train_kmeans(processed['fraud_features'], processed['fraud_labels'])
+          fraud.save()
+
+          print('Training recommender...')
+          members = data['members']
+          interactions = pd.DataFrame({
+              'member_id': members['member_id'],
+              'plan_type': members['plan_type'],
+              'rating': 1
+          })
+          rec = HybridRecommender()
+          rec.fit(members, interactions)
+          rec.save()
+
+          print('All models trained successfully!')
+          "
+
+      - name: Run data ingestion tests
+        run: |
+          export PYTHONPATH=.
           pytest tests/test_pipeline.py::TestDataIngestion -v
+
+      - name: Run feature engineering tests
+        run: |
+          export PYTHONPATH=.
           pytest tests/test_pipeline.py::TestFeatureEngineering -v
+
+      - name: Run API tests
+        run: |
+          export PYTHONPATH=.
           pytest tests/test_pipeline.py::TestAPI -v
 
-      - name: Upload coverage
-        uses: codecov/codecov-action@v4
-        with:
-          files: coverage.xml
-        continue-on-error: true
-
-  # ── 3. Model Training Smoke Test ──────────────────────────────────────────
+  # ── 3. API Smoke Test ──────────────────────────────────────────
   model-smoke-test:
-    name: Model Training Smoke Test
+    name: API Smoke Test
     runs-on: ubuntu-latest
     needs: test
     steps:
@@ -95,46 +141,90 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
 
-      - name: Install deps
+      - name: Install dependencies
         run: |
           pip install --upgrade pip setuptools wheel
-          pip install numpy pandas scikit-learn xgboost lightgbm
+          pip install "numpy>=1.24.0,<2.0.0"
+          pip install "scikit-learn>=1.3.0,<2.0.0"
+          pip install "pandas>=2.0.0,<3.0.0" scipy pyarrow
+          pip install xgboost lightgbm imbalanced-learn joblib
           pip install fastapi uvicorn httpx pydantic python-multipart requests
-          pip install scipy pyarrow python-dotenv joblib loguru tqdm
-          pip install psycopg2-binary pymongo sqlalchemy
+          pip install python-dotenv loguru tqdm psycopg2-binary pymongo sqlalchemy
 
-      - name: Generate data
+      - name: Generate data and train models
         run: |
           export PYTHONPATH=.
-          python src/ingestion/generate_synthetic_data.py --members 500 --claims 2000 --providers 50 --notes 500
+          python src/ingestion/generate_synthetic_data.py \
+            --members 500 --claims 2000 --providers 50 --notes 500
+          python -c "
+          import sys
+          sys.path.insert(0, '.')
+          from src.ingestion.data_ingestion import LocalIngestion
+          from src.preprocessing.feature_engineering import PreprocessingPipeline
+          from src.models.claim_approval_model import ClaimApprovalModel
+          from src.models.fraud_detection_model import FraudDetectionModel
+          from src.models.recommendation_engine import HybridRecommender
+          import pandas as pd
 
-      - name: Run pipeline smoke test
-        run: |
-          export PYTHONPATH=.
-          python src/ingestion/data_ingestion.py
-          python src/preprocessing/feature_engineering.py
+          data = LocalIngestion().load_all()
+          pipeline = PreprocessingPipeline()
+          processed = pipeline.fit_transform_all(data)
 
-      - name: API smoke test
+          ClaimApprovalModel(model_type='logistic').train(
+              processed['claim_features'], processed['claim_labels'])
+
+          fraud = FraudDetectionModel()
+          fraud.train_isolation_forest(processed['fraud_features'])
+          fraud.train_kmeans(processed['fraud_features'], processed['fraud_labels'])
+          fraud.save()
+
+          members = data['members']
+          interactions = pd.DataFrame({
+              'member_id': members['member_id'],
+              'plan_type': members['plan_type'],
+              'rating': 1
+          })
+          rec = HybridRecommender()
+          rec.fit(members, interactions)
+          rec.save()
+          print('Models ready!')
+          "
+
+      - name: Start API and test endpoints
         run: |
           export PYTHONPATH=.
           uvicorn src.api.main:app --host 0.0.0.0 --port 8000 &
-          sleep 5
+          sleep 8
+          echo "Testing health endpoint..."
           curl -f http://localhost:8000/api/v1/health
+          echo ""
+          echo "Testing claim prediction..."
           curl -f -X POST http://localhost:8000/api/v1/claims/predict \
             -H "Content-Type: application/json" \
-            -d '{"member_id":"MBR001","claim_amount":5000,"claim_type":"Outpatient",
-                 "diagnosis_code":"I10","procedure_code":"99213","num_procedures":2,
-                 "days_in_hospital":0,"prior_auth":1,"member_age":45,"member_bmi":27.5,
-                 "member_smoker":0,"member_plan":"Silver","num_chronic":1,"state":"CA"}'
+            -d '{
+              "member_id":"MBR001",
+              "claim_amount":5000,
+              "claim_type":"Outpatient",
+              "diagnosis_code":"I10",
+              "procedure_code":"99213",
+              "num_procedures":2,
+              "days_in_hospital":0,
+              "prior_auth":1,
+              "member_age":45,
+              "member_bmi":27.5,
+              "member_smoker":0,
+              "member_plan":"Silver",
+              "num_chronic":1,
+              "state":"CA"
+            }'
+          echo ""
+          echo "All endpoints passed!"
 
-  # ── 4. Docker Build ───────────────────────────────────────────────────────
+  # ── 4. Docker Build ────────────────────────────────────────────
   docker-build:
     name: Build Docker Image
     runs-on: ubuntu-latest
     needs: model-smoke-test
-    permissions:
-      contents: read
-      packages: write
     steps:
       - uses: actions/checkout@v4
 
