@@ -1,0 +1,42 @@
+﻿# Virtual Environment
+venv/
+.venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Environment variables
+.env
+
+# Data files (never commit real data)
+data/raw/
+data/synthetic/
+data/processed/
+
+# Model artifacts
+models/*.pkl
+models/*.pt
+models/*.h5
+
+# Logs
+logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# MLflow
+mlruns/
