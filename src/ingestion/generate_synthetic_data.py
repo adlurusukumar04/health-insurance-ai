@@ -118,6 +118,7 @@ def generate_claims(members: pd.DataFrame, n: int = 50000) -> pd.DataFrame:
     records = []
     for i in range(n):
         member = members[members["member_id"] == random.choice(member_ids)].iloc[0]
+        chronic_risk = member["num_chronic_conditions"] / 3
         fraud_flag = 1 if random.random() < 0.05 else 0  # 5% fraud rate
         amount = round(np.random.lognormal(7, 1.2), 2)
         if fraud_flag:
