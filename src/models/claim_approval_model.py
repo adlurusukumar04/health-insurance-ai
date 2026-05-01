@@ -13,12 +13,8 @@ from pathlib import Path
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
-from sklearn.metrics import (
-    classification_report,
-    roc_auc_score,
-    confusion_matrix,
-    precision_recall_curve,
-)
+from sklearn.metrics import (classification_report, roc_auc_score,
+                             confusion_matrix)
 import xgboost as xgb
 import lightgbm as lgb
 
@@ -36,7 +32,7 @@ class ClaimApprovalModel:
     def _build_model(self):
         models = {
             "logistic": LogisticRegression(max_iter=1000, class_weight="balanced"),
-            "rf": RandomForestClassifier(
+            "r": RandomForestClassifier(
                 n_estimators=200,
                 max_depth=10,
                 class_weight="balanced",
@@ -175,7 +171,7 @@ if __name__ == "__main__":
 
     # Train all 4 models
     results = {}
-    for model_type in ["logistic", "rf", "xgboost", "lightgbm"]:
+    for model_type in ["logistic", "r", "xgboost", "lightgbm"]:
         print(f"🤖 Training: {model_type}")
         model = ClaimApprovalModel(model_type=model_type)
         metrics = model.train(X, y)

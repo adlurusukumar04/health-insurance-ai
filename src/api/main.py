@@ -15,7 +15,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, List
 import logging
-import time
 import pandas as pd
 from dotenv import load_dotenv
 
@@ -170,8 +169,8 @@ def get_recommender():
 
 # ─── Mock Predictions (fallback when models not trained) ──────────────────────
 def _mock_claim_predict(req: ClaimRequest) -> dict:
-    import random, hashlib
-
+    import random
+    import hashlib
     seed = int(hashlib.md5(req.member_id.encode()).hexdigest()[:8], 16)
     rng = random.Random(seed)
     prob = rng.uniform(0.5, 0.98)
@@ -187,8 +186,8 @@ def _mock_claim_predict(req: ClaimRequest) -> dict:
 
 
 def _mock_fraud_predict(req: FraudRequest) -> dict:
-    import random, hashlib
-
+    import random
+    import hashlib
     seed = int(hashlib.md5(req.claim_id.encode()).hexdigest()[:8], 16)
     rng = random.Random(seed)
     score = rng.uniform(0.0, 0.4)
