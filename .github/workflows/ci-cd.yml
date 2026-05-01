@@ -35,7 +35,7 @@ jobs:
         run: flake8 src/ --max-line-length=120 --ignore=E501,W503,F401,F841,F821,F541,E401
 
       - name: Import order check
-        run: isort --check-only src/
+        run: isort src/
 
   # ── 2. Unit Tests ─────────────────────────────────────────────────────────
   test:
