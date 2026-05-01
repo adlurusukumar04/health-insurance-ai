@@ -24,16 +24,49 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 DIAGNOSIS_CODES = [
-    "I10", "E11", "J45", "M54", "K21", "F32", "I25", "N18",
-    "C34", "G43", "J06", "E78", "I50", "M17", "F41"
+    "I10",
+    "E11",
+    "J45",
+    "M54",
+    "K21",
+    "F32",
+    "I25",
+    "N18",
+    "C34",
+    "G43",
+    "J06",
+    "E78",
+    "I50",
+    "M17",
+    "F41",
 ]
 DIAGNOSIS_NAMES = [
-    "Hypertension", "Type 2 Diabetes", "Asthma", "Back Pain",
-    "GERD", "Depression", "Coronary Artery Disease", "CKD",
-    "Lung Cancer", "Migraine", "Upper Respiratory Infection",
-    "Hyperlipidemia", "Heart Failure", "Osteoarthritis", "Anxiety"
+    "Hypertension",
+    "Type 2 Diabetes",
+    "Asthma",
+    "Back Pain",
+    "GERD",
+    "Depression",
+    "Coronary Artery Disease",
+    "CKD",
+    "Lung Cancer",
+    "Migraine",
+    "Upper Respiratory Infection",
+    "Hyperlipidemia",
+    "Heart Failure",
+    "Osteoarthritis",
+    "Anxiety",
 ]
-PROCEDURE_CODES = ["99213", "93000", "71046", "80053", "85025", "36415", "99232", "99285"]
+PROCEDURE_CODES = [
+    "99213",
+    "93000",
+    "71046",
+    "80053",
+    "85025",
+    "36415",
+    "99232",
+    "99285",
+]
 STATES = ["CA", "TX", "FL", "NY", "IL", "PA", "OH", "GA", "NC", "MI"]
 PLAN_TYPES = ["Bronze", "Silver", "Gold", "Platinum"]
 PROVIDER_TYPES = ["Hospital", "Clinic", "Specialist", "Lab", "Pharmacy"]
@@ -44,27 +77,35 @@ CLAIM_STATUS = ["Approved", "Denied", "Pending"]
 def generate_members(n: int = 10000) -> pd.DataFrame:
     print(f"  Generating {n} member records...")
     ages = np.random.normal(45, 15, n).clip(18, 85).astype(int)
-    bmi  = np.random.normal(27, 5, n).clip(15, 55).round(1)
+    bmi = np.random.normal(27, 5, n).clip(15, 55).round(1)
 
     records = []
     for i in range(n):
         chronic = random.randint(0, min(3, ages[i] // 25))
-        diag_indices = random.sample(range(len(DIAGNOSIS_CODES)), k=min(chronic, len(DIAGNOSIS_CODES)))
-        records.append({
-            "member_id":        f"MBR{i+1:06d}",
-            "age":              ages[i],
-            "gender":           random.choice(["M", "F", "Other"]),
-            "state":            random.choice(STATES),
-            "bmi":              bmi[i],
-            "smoker":           random.choices([0, 1], weights=[0.82, 0.18])[0],
-            "plan_type":        random.choice(PLAN_TYPES),
-            "tenure_months":    random.randint(1, 120),
-            "num_chronic_conditions": chronic,
-            "primary_diagnosis": DIAGNOSIS_CODES[diag_indices[0]] if diag_indices else "None",
-            "annual_premium":   round(random.uniform(3000, 18000), 2),
-            "deductible":       random.choice([500, 1000, 2000, 3500, 5000]),
-            "member_since":     (datetime.now() - timedelta(days=random.randint(30, 3650))).strftime("%Y-%m-%d"),
-        })
+        diag_indices = random.sample(
+            range(len(DIAGNOSIS_CODES)), k=min(chronic, len(DIAGNOSIS_CODES))
+        )
+        records.append(
+            {
+                "member_id": f"MBR{i+1:06d}",
+                "age": ages[i],
+                "gender": random.choice(["M", "F", "Other"]),
+                "state": random.choice(STATES),
+                "bmi": bmi[i],
+                "smoker": random.choices([0, 1], weights=[0.82, 0.18])[0],
+                "plan_type": random.choice(PLAN_TYPES),
+                "tenure_months": random.randint(1, 120),
+                "num_chronic_conditions": chronic,
+                "primary_diagnosis": (
+                    DIAGNOSIS_CODES[diag_indices[0]] if diag_indices else "None"
+                ),
+                "annual_premium": round(random.uniform(3000, 18000), 2),
+                "deductible": random.choice([500, 1000, 2000, 3500, 5000]),
+                "member_since": (
+                    datetime.now() - timedelta(days=random.randint(30, 3650))
+                ).strftime("%Y-%m-%d"),
+            }
+        )
     return pd.DataFrame(records)
 
 
@@ -76,11 +117,11 @@ def generate_claims(members: pd.DataFrame, n: int = 50000) -> pd.DataFrame:
     records = []
     for i in range(n):
         member = members[members["member_id"] == random.choice(member_ids)].iloc[0]
-        age_risk     = member["age"] / 85
+        age_risk = member["age"] / 85
         chronic_risk = member["num_chronic_conditions"] / 3
-        base_risk    = (age_risk + chronic_risk) / 2
-        fraud_flag   = 1 if random.random() < 0.05 else 0   # 5% fraud rate
-        amount       = round(np.random.lognormal(7, 1.2), 2)
+        base_risk = (age_risk + chronic_risk) / 2
+        fraud_flag = 1 if random.random() < 0.05 else 0  # 5% fraud rate
+        amount = round(np.random.lognormal(7, 1.2), 2)
         if fraud_flag:
             amount *= random.uniform(3, 10)
 
@@ -94,28 +135,38 @@ def generate_claims(members: pd.DataFrame, n: int = 50000) -> pd.DataFrame:
             status = "Approved"
 
         claim_date = datetime.now() - timedelta(days=random.randint(1, 730))
-        records.append({
-            "claim_id":         f"CLM{i+1:07d}",
-            "member_id":        member["member_id"],
-            "provider_id":      f"PRV{random.randint(1, 500):04d}",
-            "claim_date":       claim_date.strftime("%Y-%m-%d"),
-            "claim_type":       random.choice(["Inpatient", "Outpatient", "Emergency", "Pharmacy", "Lab"]),
-            "diagnosis_code":   random.choice(DIAGNOSIS_CODES),
-            "procedure_code":   random.choice(PROCEDURE_CODES),
-            "claim_amount":     amount,
-            "approved_amount":  round(amount * random.uniform(0.6, 1.0), 2) if status == "Approved" else 0,
-            "claim_status":     status,
-            "days_in_hospital": random.randint(0, 14) if random.random() < 0.3 else 0,
-            "num_procedures":   random.randint(1, 8),
-            "prior_auth":       random.choice([0, 1]),
-            "is_fraud":         fraud_flag,
-            "member_age":       member["age"],
-            "member_bmi":       member["bmi"],
-            "member_smoker":    member["smoker"],
-            "member_plan":      member["plan_type"],
-            "num_chronic":      member["num_chronic_conditions"],
-            "state":            member["state"],
-        })
+        records.append(
+            {
+                "claim_id": f"CLM{i+1:07d}",
+                "member_id": member["member_id"],
+                "provider_id": f"PRV{random.randint(1, 500):04d}",
+                "claim_date": claim_date.strftime("%Y-%m-%d"),
+                "claim_type": random.choice(
+                    ["Inpatient", "Outpatient", "Emergency", "Pharmacy", "Lab"]
+                ),
+                "diagnosis_code": random.choice(DIAGNOSIS_CODES),
+                "procedure_code": random.choice(PROCEDURE_CODES),
+                "claim_amount": amount,
+                "approved_amount": (
+                    round(amount * random.uniform(0.6, 1.0), 2)
+                    if status == "Approved"
+                    else 0
+                ),
+                "claim_status": status,
+                "days_in_hospital": (
+                    random.randint(0, 14) if random.random() < 0.3 else 0
+                ),
+                "num_procedures": random.randint(1, 8),
+                "prior_auth": random.choice([0, 1]),
+                "is_fraud": fraud_flag,
+                "member_age": member["age"],
+                "member_bmi": member["bmi"],
+                "member_smoker": member["smoker"],
+                "member_plan": member["plan_type"],
+                "num_chronic": member["num_chronic_conditions"],
+                "state": member["state"],
+            }
+        )
     return pd.DataFrame(records)
 
 
@@ -124,17 +175,19 @@ def generate_providers(n: int = 500) -> pd.DataFrame:
     print(f"  Generating {n} provider records...")
     records = []
     for i in range(n):
-        records.append({
-            "provider_id":       f"PRV{i+1:04d}",
-            "provider_name":     f"Provider_{i+1}",
-            "provider_type":     random.choice(PROVIDER_TYPES),
-            "state":             random.choice(STATES),
-            "avg_claim_amount":  round(random.uniform(500, 15000), 2),
-            "total_claims":      random.randint(10, 5000),
-            "fraud_rate":        round(random.uniform(0.0, 0.15), 4),
-            "accreditation":     random.choice(["JCAHO", "AAAHC", "DNV", "None"]),
-            "years_active":      random.randint(1, 30),
-        })
+        records.append(
+            {
+                "provider_id": f"PRV{i+1:04d}",
+                "provider_name": f"Provider_{i+1}",
+                "provider_type": random.choice(PROVIDER_TYPES),
+                "state": random.choice(STATES),
+                "avg_claim_amount": round(random.uniform(500, 15000), 2),
+                "total_claims": random.randint(10, 5000),
+                "fraud_rate": round(random.uniform(0.0, 0.15), 4),
+                "accreditation": random.choice(["JCAHO", "AAAHC", "DNV", "None"]),
+                "years_active": random.randint(1, 30),
+            }
+        )
     return pd.DataFrame(records)
 
 
@@ -148,10 +201,24 @@ def generate_clinical_notes(n: int = 5000) -> pd.DataFrame:
         "{age}yo {gender} with history of {diag} presenting with acute exacerbation.",
         "Post-operative visit. Procedure: {proc}. Wound healing well. No complications noted.",
     ]
-    meds = ["Metformin 500mg", "Lisinopril 10mg", "Atorvastatin 20mg",
-            "Albuterol inhaler", "Omeprazole 20mg", "Sertraline 50mg"]
-    symptoms = ["chest pain", "shortness of breath", "fatigue", "dizziness",
-                "nausea", "back pain", "headache", "swelling"]
+    meds = [
+        "Metformin 500mg",
+        "Lisinopril 10mg",
+        "Atorvastatin 20mg",
+        "Albuterol inhaler",
+        "Omeprazole 20mg",
+        "Sertraline 50mg",
+    ]
+    symptoms = [
+        "chest pain",
+        "shortness of breath",
+        "fatigue",
+        "dizziness",
+        "nausea",
+        "back pain",
+        "headache",
+        "swelling",
+    ]
 
     records = []
     for i in range(n):
@@ -168,15 +235,19 @@ def generate_clinical_notes(n: int = 5000) -> pd.DataFrame:
             gender=random.choice(["male", "female"]),
             proc=random.choice(PROCEDURE_CODES),
         )
-        records.append({
-            "note_id":          f"NOTE{i+1:06d}",
-            "member_id":        f"MBR{random.randint(1, 10000):06d}",
-            "note_date":        (datetime.now() - timedelta(days=random.randint(1, 365))).strftime("%Y-%m-%d"),
-            "clinical_note":    note,
-            "diagnosis_code":   DIAGNOSIS_CODES[diag_idx],
-            "diagnosis_label":  DIAGNOSIS_NAMES[diag_idx],
-            "sentiment_label":  random.choice(["positive", "neutral", "negative"]),
-        })
+        records.append(
+            {
+                "note_id": f"NOTE{i+1:06d}",
+                "member_id": f"MBR{random.randint(1, 10000):06d}",
+                "note_date": (
+                    datetime.now() - timedelta(days=random.randint(1, 365))
+                ).strftime("%Y-%m-%d"),
+                "clinical_note": note,
+                "diagnosis_code": DIAGNOSIS_CODES[diag_idx],
+                "diagnosis_label": DIAGNOSIS_NAMES[diag_idx],
+                "sentiment_label": random.choice(["positive", "neutral", "negative"]),
+            }
+        )
     return pd.DataFrame(records)
 
 
@@ -184,10 +255,10 @@ def generate_clinical_notes(n: int = 5000) -> pd.DataFrame:
 def main(args):
     print("\n🔄 Generating synthetic health insurance data...\n")
 
-    members   = generate_members(args.members)
-    claims    = generate_claims(members, args.claims)
+    members = generate_members(args.members)
+    claims = generate_claims(members, args.claims)
     providers = generate_providers(args.providers)
-    notes     = generate_clinical_notes(args.notes)
+    notes = generate_clinical_notes(args.notes)
 
     # Save to CSV
     members.to_csv(OUTPUT_DIR / "members.csv", index=False)
@@ -198,7 +269,9 @@ def main(args):
     # Summary
     print("\n✅ Datasets saved to data/synthetic/")
     print(f"   members.csv      → {len(members):,} rows")
-    print(f"   claims.csv       → {len(claims):,} rows  | fraud rate: {claims['is_fraud'].mean():.1%}")
+    print(
+        f"   claims.csv       → {len(claims):,} rows  | fraud rate: {claims['is_fraud'].mean():.1%}"
+    )
     print(f"   providers.csv    → {len(providers):,} rows")
     print(f"   clinical_notes.csv → {len(notes):,} rows\n")
 
@@ -215,10 +288,12 @@ def main(args):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Generate synthetic health insurance data")
-    parser.add_argument("--members",   type=int, default=10000)
-    parser.add_argument("--claims",    type=int, default=50000)
+    parser = argparse.ArgumentParser(
+        description="Generate synthetic health insurance data"
+    )
+    parser.add_argument("--members", type=int, default=10000)
+    parser.add_argument("--claims", type=int, default=50000)
     parser.add_argument("--providers", type=int, default=500)
-    parser.add_argument("--notes",     type=int, default=5000)
+    parser.add_argument("--notes", type=int, default=5000)
     args = parser.parse_args()
     main(args)
