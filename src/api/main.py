@@ -38,7 +38,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-security = HTTPBearer(auto_error=False)
 
 # ─── Pydantic Schemas ──────────────────────────────────────────────────────────
 
@@ -232,10 +231,8 @@ def predict_claim(req: ClaimRequest, background_tasks: BackgroundTasks):
     Predict claim approval probability and risk score.
     Returns decision: Approve or Review.
     """
-    t0 = time.time()
     model = get_claim_model()
     import uuid
-    import time as _time
 
     if model:
         from src.preprocessing.feature_engineering import ClaimFeatureEngineer
@@ -264,7 +261,6 @@ def detect_fraud(req: FraudRequest):
     Detect potential fraud using Isolation Forest + K-Means ensemble.
     Returns anomaly score and fraud flag.
     """
-    t0 = time.time()
     model = get_fraud_model()
 
     if model:
@@ -296,7 +292,6 @@ def analyze_medical_text(req: NLPRequest):
     """
     Analyze clinical notes: clean text, predict diagnosis, analyze sentiment.
     """
-    t0 = time.time()
     from src.models.nlp_medical_text import MedicalTextPreprocessor
 
     preprocessor = MedicalTextPreprocessor()

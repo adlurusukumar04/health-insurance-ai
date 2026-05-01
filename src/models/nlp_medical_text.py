@@ -457,7 +457,7 @@ if __name__ == "__main__":
             print(
                 f"  {emoji} [{row['sentiment']}] ({row['score']:.2f}) — {row['text'][:60]}..."
             )
-    except Exception as e:
+    except Exception:
         print("  ⚠ Sentiment model needs internet to download (~250MB)")
         print("  Running keyword-based fallback instead...\n")
         for text in feedback_samples:

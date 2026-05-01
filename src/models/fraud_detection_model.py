@@ -50,8 +50,6 @@ class FraudDetectionModel:
         logger.info(f"Training Isolation Forest on {len(X):,} samples...")
         X_scaled = self.scaler.fit_transform(X)
         self.isolation_forest.fit(X_scaled)
-
-        scores = self.isolation_forest.decision_function(X_scaled)
         preds = self.isolation_forest.predict(X_scaled)  # -1 = anomaly, 1 = normal
         n_anomalies = (preds == -1).sum()
         logger.info(f"  Anomalies detected: {n_anomalies:,} ({n_anomalies/len(X):.1%})")
@@ -63,7 +61,6 @@ class FraudDetectionModel:
     def predict_isolation_forest(self, X: pd.DataFrame) -> pd.DataFrame:
         X_scaled = self.scaler.transform(X)
         preds = self.isolation_forest.predict(X_scaled)
-        scores = self.isolation_forest.decision_function(X_scaled)
         # Normalize anomaly score to [0, 1] — higher = more anomalous
         anomaly_score = 1 - (scores - scores.min()) / (
             scores.max() - scores.min() + 1e-9
