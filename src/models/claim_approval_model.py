@@ -137,7 +137,7 @@ class ClaimApprovalModel:
     def save(self):
         path = MODEL_DIR / f"{self.model_type}_claim_model.pkl"
         joblib.dump(self.model, path)
-        logger.info(f"Model saved → {path}")
+        logger.info("Model saved → {path}")
 
     @classmethod
     def load(cls, model_type: str = "xgboost") -> "ClaimApprovalModel":

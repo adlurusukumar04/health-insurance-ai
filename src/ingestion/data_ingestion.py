@@ -11,12 +11,9 @@ Handles data ingestion from:
 
 import os
 import io
-import json
 import logging
 import pandas as pd
-import numpy as np
 from pathlib import Path
-from datetime import datetime
 from dotenv import load_dotenv
 
 load_dotenv()

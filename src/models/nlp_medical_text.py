@@ -11,14 +11,12 @@ NLP pipeline for medical text analysis:
 
 import re
 import logging
-import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
 from pathlib import Path
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-from sklearn.metrics import classification_report
 
 logger = logging.getLogger(__name__)
 MODEL_DIR = Path("models/nlp")
@@ -405,7 +403,7 @@ if __name__ == "__main__":
         # Clean all notes
         print(f"\n  Cleaning all {len(notes_df):,} notes...")
         notes_df["clean_text"] = preprocessor.batch_clean(notes_df["clinical_note"])
-        print(f"  ✓ Cleaning complete")
+        print("  ✓ Cleaning complete")
         print(f"\n  Sample cleaned:\n  {notes_df['clean_text'].iloc[0]}")
     else:
         print("  ⚠ clinical_notes.csv not found — using test notes")
@@ -434,7 +432,7 @@ if __name__ == "__main__":
         epochs=5,
         batch_size=32,
     )
-    print(f"\n  Training history:")
+    print("\n  Training history:")
     for h in history["history"]:
         print(f"    Epoch {h['epoch']}: Test Accuracy = {h['test_acc']:.4f}")
 
@@ -460,8 +458,8 @@ if __name__ == "__main__":
                 f"  {emoji} [{row['sentiment']}] ({row['score']:.2f}) — {row['text'][:60]}..."
             )
     except Exception as e:
-        print(f"  ⚠ Sentiment model needs internet to download (~250MB)")
-        print(f"  Running keyword-based fallback instead...\n")
+        print("  ⚠ Sentiment model needs internet to download (~250MB)")
+        print("  Running keyword-based fallback instead...\n")
         for text in feedback_samples:
             positive_words = [
                 "smooth",
@@ -508,5 +506,5 @@ if __name__ == "__main__":
     print(
         f"  ✓ Sentiment analyser — {len(feedback_samples)} feedback samples processed"
     )
-    print(f"  ✓ LSTM model saved   → models/nlp/lstm_model.pt")
+    print("  ✓ LSTM model saved   → models/nlp/lstm_model.pt")
     print("=" * 60)

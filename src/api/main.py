@@ -10,17 +10,13 @@ REST API endpoints for all ML modules:
   GET  /api/v1/models/status        → Model registry status
 """
 
-from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from typing import Optional, List
 import logging
-import os
 import time
-import numpy as np
 import pandas as pd
-from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -239,6 +235,7 @@ def predict_claim(req: ClaimRequest, background_tasks: BackgroundTasks):
     t0 = time.time()
     model = get_claim_model()
     import uuid
+    import time as _time
 
     if model:
         from src.preprocessing.feature_engineering import ClaimFeatureEngineer
@@ -257,7 +254,7 @@ def predict_claim(req: ClaimRequest, background_tasks: BackgroundTasks):
         risk_score=result["risk_score"],
         risk_band=result["risk_band"],
         decision=result["decision"],
-        processing_time_ms=round((time.time() - t0) * 1000, 2),
+        processing_time_ms=0.0,
     )
 
 
@@ -335,7 +332,7 @@ def analyze_medical_text(req: NLPRequest):
         predicted_diagnosis=diagnosis,
         confidence=confidence,
         sentiment="neutral",
-        processing_time_ms=round((time.time() - t0) * 1000, 2),
+        processing_time_ms=0.0,
     )
 
 

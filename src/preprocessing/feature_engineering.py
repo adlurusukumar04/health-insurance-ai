@@ -260,7 +260,6 @@ class PreprocessingPipeline:
         """
         claims = data["claims"]
         members = data.get("members", pd.DataFrame())
-        providers = data.get("providers", pd.DataFrame())
 
         # Rename columns if they exist under different names (from generate_synthetic_data)
         rename_map = {

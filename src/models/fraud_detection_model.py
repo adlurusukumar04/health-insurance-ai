@@ -189,7 +189,7 @@ class FraudDetectionModel:
 
     def save(self):
         joblib.dump(self, MODEL_DIR / "fraud_detection_model.pkl")
-        logger.info(f"Fraud model saved → {MODEL_DIR}")
+        logger.info("Fraud model saved → {MODEL_DIR}")
 
     @classmethod
     def load(cls) -> "FraudDetectionModel":
