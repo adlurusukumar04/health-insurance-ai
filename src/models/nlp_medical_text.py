@@ -9,12 +9,13 @@ NLP pipeline for medical text analysis:
   - Sentiment analysis from patient feedback
 """
 
-import re
 import logging
+import re
+from pathlib import Path
+
 import pandas as pd
 import torch
 import torch.nn as nn
-from pathlib import Path
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 
@@ -80,7 +81,7 @@ class BERTDiagnosisClassifier:
         self.model = None
 
     def _load_model(self):
-        from transformers import AutoTokenizer, AutoModelForSequenceClassification
+        from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
         logger.info(f"Loading {self.model_name} on {self.device}...")
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
@@ -91,7 +92,7 @@ class BERTDiagnosisClassifier:
     def train(
         self, texts: list, labels: list, epochs: int = 3, batch_size: int = 16
     ) -> dict:
-        from torch.utils.data import Dataset, DataLoader
+        from torch.utils.data import DataLoader, Dataset
         from transformers import AdamW, get_linear_schedule_with_warmup
 
         self._load_model()
@@ -268,7 +269,7 @@ class LSTMTrainer:
     def train(
         self, texts: list, labels: list, epochs: int = 10, batch_size: int = 64
     ) -> dict:
-        from torch.utils.data import TensorDataset, DataLoader
+        from torch.utils.data import DataLoader, TensorDataset
 
         self._build_vocab(texts)
         y = self.label_encoder.fit_transform(labels)
@@ -390,8 +391,9 @@ if __name__ == "__main__":
     # ── Step 2: Load clinical notes ───────────────────────────
     print("\n\n📂 Step 2: Loading Clinical Notes Dataset")
     print("-" * 40)
-    import pandas as pd
     from pathlib import Path
+
+    import pandas as pd
 
     notes_path = Path("data/synthetic/clinical_notes.csv")
     if notes_path.exists():

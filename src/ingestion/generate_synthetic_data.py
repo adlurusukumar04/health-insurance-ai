@@ -8,13 +8,14 @@ Generates realistic synthetic health insurance datasets for:
   - Transaction logs (for fraud detection)
 """
 
-import pandas as pd
-import numpy as np
-from pathlib import Path
+import argparse
 import json
 import random
 from datetime import datetime, timedelta
-import argparse
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
 
 np.random.seed(42)
 random.seed(42)

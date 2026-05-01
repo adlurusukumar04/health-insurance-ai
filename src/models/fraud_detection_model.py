@@ -8,16 +8,17 @@ Unsupervised + supervised fraud detection:
   - XGBoost (supervised, when labels available)
 """
 
-import pandas as pd
-import numpy as np
-import joblib
 import logging
 from pathlib import Path
-from sklearn.ensemble import IsolationForest
-from sklearn.cluster import KMeans
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import roc_auc_score, classification_report
+
+import joblib
+import numpy as np
+import pandas as pd
 import xgboost as xgb
+from sklearn.cluster import KMeans
+from sklearn.ensemble import IsolationForest
+from sklearn.metrics import classification_report, roc_auc_score
+from sklearn.preprocessing import StandardScaler
 
 logger = logging.getLogger(__name__)
 MODEL_DIR = Path("models/fraud_detection")

@@ -8,13 +8,14 @@ Feature engineering & preprocessing for all modules:
   - Recommendation Engine
 """
 
-import pandas as pd
-import numpy as np
 import logging
-import joblib
 from pathlib import Path
-from sklearn.preprocessing import LabelEncoder, StandardScaler, MinMaxScaler
+
+import joblib
+import numpy as np
+import pandas as pd
 from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import LabelEncoder, MinMaxScaler, StandardScaler
 
 logger = logging.getLogger(__name__)
 ARTIFACTS_DIR = Path("models/artifacts")

@@ -21,8 +21,8 @@ import argparse
 import json
 import logging
 import time
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 logging.basicConfig(
     level=logging.INFO,
@@ -117,6 +117,7 @@ def run_fraud_model(processed: dict) -> dict:
 def run_recommendation_model(data: dict) -> dict:
     step_banner(5, "RECOMMENDATION ENGINE TRAINING")
     import pandas as pd
+
     from src.models.recommendation_engine import HybridRecommender
 
     members = data["members"]

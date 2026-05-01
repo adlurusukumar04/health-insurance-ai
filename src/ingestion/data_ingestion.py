@@ -9,11 +9,12 @@ Handles data ingestion from:
   - Local CSV files
 """
 
-import os
 import io
 import logging
-import pandas as pd
+import os
 from pathlib import Path
+
+import pandas as pd
 from dotenv import load_dotenv
 
 load_dotenv()

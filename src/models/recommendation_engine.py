@@ -8,14 +8,15 @@ Personalized insurance plan recommendation:
   - Hybrid Ensemble
 """
 
+import logging
+from pathlib import Path
+
+import joblib
 import numpy as np
 import pandas as pd
-import logging
-import joblib
-from pathlib import Path
+from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics.pairwise import cosine_similarity
 
 logger = logging.getLogger(__name__)
 MODEL_DIR = Path("models/recommendation")
@@ -48,8 +49,8 @@ class CollaborativeFilter:
         interactions: DataFrame with columns [member_id, plan_type, rating]
         rating = 1 (enrolled) or satisfaction_score (1–5)
         """
-        from scipy.sparse.linalg import svds
         from scipy.sparse import csr_matrix
+        from scipy.sparse.linalg import svds
 
         # Build interaction matrix
         members = interactions["member_id"].unique()

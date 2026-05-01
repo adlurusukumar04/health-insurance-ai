@@ -10,13 +10,14 @@ REST API endpoints for all ML modules:
   GET  /api/v1/models/status        → Model registry status
 """
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-from typing import Optional, List
 import logging
+from typing import List, Optional
+
 import pandas as pd
 from dotenv import load_dotenv
+from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -169,8 +170,8 @@ def get_recommender():
 
 # ─── Mock Predictions (fallback when models not trained) ──────────────────────
 def _mock_claim_predict(req: ClaimRequest) -> dict:
-    import random
     import hashlib
+    import random
 
     seed = int(hashlib.md5(req.member_id.encode()).hexdigest()[:8], 16)
     rng = random.Random(seed)
@@ -187,8 +188,8 @@ def _mock_claim_predict(req: ClaimRequest) -> dict:
 
 
 def _mock_fraud_predict(req: FraudRequest) -> dict:
-    import random
     import hashlib
+    import random
 
     seed = int(hashlib.md5(req.claim_id.encode()).hexdigest()[:8], 16)
     rng = random.Random(seed)
