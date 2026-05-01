@@ -1,0 +1,102 @@
+version: "3.9"
+
+services:
+
+  # ── FastAPI ML Service ────────────────────────────────────
+  api:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: health-insurance-api
+    ports:
+      - "8000:8000"
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=health_insurance
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=password
+      - MONGO_URI=mongodb://mongo:27017/health_insurance
+    volumes:
+      - ./models:/app/models
+      - ./data:/app/data
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── PostgreSQL ────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: health-insurance-db
+    environment:
+      POSTGRES_DB: health_insurance
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d health_insurance"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── MongoDB ───────────────────────────────────────────────
+  mongo:
+    image: mongo:7
+    container_name: health-insurance-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  # ── MLflow Tracking Server ────────────────────────────────
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.9.2
+    container_name: mlflow-server
+    command: >
+      mlflow server
+      --backend-store-uri postgresql://admin:password@postgres/mlflow
+      --default-artifact-root /mlflow/artifacts
+      --host 0.0.0.0 --port 5000
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow_artifacts:/mlflow/artifacts
+    depends_on:
+      - postgres
+
+  # ── Airflow (pipeline orchestration) ─────────────────────
+  airflow:
+    image: apache/airflow:2.8.0-python3.10
+    container_name: airflow
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://admin:password@postgres/airflow
+      AIRFLOW__CORE__FERNET_KEY: ""
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    volumes:
+      - ./deployment/airflow:/opt/airflow/dags
+      - ./src:/opt/airflow/health-insurance-ai/src
+      - airflow_logs:/opt/airflow/logs
+    ports:
+      - "8080:8080"
+    command: >
+      bash -c "airflow db init && airflow users create
+        --username admin --password admin
+        --firstname Admin --lastname User
+        --role Admin --email admin@lumen.com
+        && airflow webserver --port 8080 &
+        airflow scheduler"
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+  mongo_data:
+  mlflow_artifacts:
+  airflow_logs:

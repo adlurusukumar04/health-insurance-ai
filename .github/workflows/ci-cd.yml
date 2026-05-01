@@ -1,0 +1,165 @@
+name: Health Insurance AI – CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.10"
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/health-insurance-api
+
+jobs:
+
+  # ── 1. Code Quality ──────────────────────────────────────────────────────
+  lint-and-format:
+    name: Lint & Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install linting tools
+        run: pip install black flake8 isort
+
+      - name: Black format check
+        run: black --check src/
+
+      - name: Flake8 lint
+        run: flake8 src/ --max-line-length=120 --ignore=E501,W503
+
+      - name: Import order check
+        run: isort --check-only src/
+
+  # ── 2. Unit Tests ─────────────────────────────────────────────────────────
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    needs: lint-and-format
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-asyncio
+
+      - name: Generate synthetic data
+        run: python src/ingestion/generate_synthetic_data.py --members 500 --claims 2000
+
+      - name: Run unit tests
+        run: pytest tests/ -v --cov=src --cov-report=xml --cov-report=term-missing
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.xml
+
+  # ── 3. Model Training Smoke Test ──────────────────────────────────────────
+  model-smoke-test:
+    name: Model Training Smoke Test
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Generate data
+        run: python src/ingestion/generate_synthetic_data.py --members 1000 --claims 5000
+
+      - name: Run pipeline (claim + fraud only for speed)
+        run: python src/pipelines/run_pipeline.py --module claim
+
+      - name: API smoke test
+        run: |
+          uvicorn src.api.main:app --host 0.0.0.0 --port 8000 &
+          sleep 5
+          curl -f http://localhost:8000/api/v1/health
+          curl -f -X POST http://localhost:8000/api/v1/claims/predict \
+            -H "Content-Type: application/json" \
+            -d '{"member_id":"MBR001","claim_amount":5000,"claim_type":"Outpatient",
+                 "diagnosis_code":"I10","procedure_code":"99213","num_procedures":2,
+                 "days_in_hospital":0,"prior_auth":1,"member_age":45,"member_bmi":27.5,
+                 "member_smoker":0,"member_plan":"Silver","num_chronic":1,"state":"CA"}'
+
+  # ── 4. Docker Build ───────────────────────────────────────────────────────
+  docker-build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: model-smoke-test
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── 5. Deploy to Staging (main branch only) ───────────────────────────────
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: docker-build
+    if: github.ref == 'refs/heads/main'
+    environment: staging
+    steps:
+      - name: Deploy to staging server
+        run: |
+          echo "🚀 Deploying to staging..."
+          # Add your deployment script here:
+          # ssh user@staging-server "docker pull $IMAGE && docker-compose up -d"
+          echo "✅ Staging deployment complete"
+
+      - name: Notify Slack
+        if: always()
+        run: |
+          echo "Notifying team of deployment status: ${{ job.status }}"
+          # curl -X POST -H 'Content-type: application/json' \
+          #   --data '{"text":"🏥 Health Insurance AI deployed to staging: ${{ job.status }}"}' \
+          #   ${{ secrets.SLACK_WEBHOOK_URL }}
