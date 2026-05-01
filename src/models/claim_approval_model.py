@@ -13,8 +13,7 @@ from pathlib import Path
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
-from sklearn.metrics import (classification_report, roc_auc_score,
-                             confusion_matrix)
+from sklearn.metrics import classification_report, roc_auc_score, confusion_matrix
 import xgboost as xgb
 import lightgbm as lgb
 
